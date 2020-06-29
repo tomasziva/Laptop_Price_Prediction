@@ -42,13 +42,16 @@ package.check <- lapply(packages, FUN = function(x) {
 stepAIC <- MASS::stepAIC
 combinations <- gtools::combinations
 
-
+# load data
 # train <- read.csv("train.csv", na.strings = "")
 train <- read.csv("train.csv", stringsAsFactors = FALSE)
 test <- read.csv("test.csv", stringsAsFactors = FALSE)
 GPU <- read.csv("GPU_details.csv", stringsAsFactors = FALSE)
 
+# load full laptops data
 laptops <- read.csv("laptops.csv", stringsAsFactors = FALSE)
+
+# find out which of laptops belong to test dataset 
 test.label <- test[, c("ï..id", "base_name")]
 test.label$dataset <- "test"
 laptops <- left_join(laptops, test.label, by = "ï..id")
@@ -68,23 +71,22 @@ dim(test)
 summary(train)
 str(train)
 
-for (i in colnames(train)){
-  if (!is.numeric(train[,i])){
-    print(i)
-    print(factor(train[,i]))
-  }
-}
+
+# Print out factor variable values for each observtion
+# for (i in colnames(train)){
+#   if (!is.numeric(train[,i])){
+#     print(i)
+#     print(factor(train[,i]))
+#   }
+# }
 
 # Missingness
 vis_miss(train,cluster= TRUE) # VIM package for missing values
 gg_miss_var(train)
 gg_miss_case(train)
 
-
 # Correlation
-
 #dev.off()
-
 library(corrgram)
 nums <- unlist(lapply(train, is.numeric))
 tr22 <- train
@@ -175,11 +177,11 @@ for (i in 1:length(splitString)) {
   }
 }
 
-#add GHz column to train dataset
+# add GHz column to train dataset
 train_2$ghz <- NA
 train_2$ghz[train_2$cpu_details != ""] <- cpu_ghz
 
-#add threading variable, remove excess parenthesis
+# add threading variable, remove excess parenthesis
 train_2$thread <- sapply(strsplit(train_2$cpu_details, ' ', fixed = TRUE), function(i) 
   paste(grep('Thread', i, value = TRUE, fixed = TRUE), collapse = ' '))
 train_2$thread <- gsub(")", "", train_2$thread)
@@ -202,7 +204,7 @@ for (i in 1:length(splitString_gpu)) {
   }
 }
 # View(cpu_ghz)
-#add memory variable to train dataset
+# add memory variable to train dataset
 train_2$gpu_memory <- gpu_mb
 train_2$Memory <- NULL
 
@@ -263,6 +265,7 @@ train_2$perks <- (train_2$bluetooth + train_2$webcam + train_2$usb +
                     train_2$wifi + train_2$dvd + train_2$hdmi + train_2$fingerprint + 
                     train_2$gold)/8
 
+# delete unneeded columns
 train_2$bluetooth <- NULL
 train_2$webcam <- NULL
 train_2$usb <- NULL
@@ -272,6 +275,7 @@ train_2$hdmi <- NULL
 train_2$fingerprint <- NULL
 train_2$gold <- NULL
 
+# standardize column names
 train_2 <- train_2 %>%  rename(gpu_brand=Brand, 
                                gpu_clock=GPU.clock,
                                gpu_memory_clock=Memory.clock)
@@ -455,11 +459,9 @@ gg_miss_var(train_2) + theme(axis.text=element_text(size=14), axis.title=element
 gg_miss_case(train_2) + theme(axis.text=element_text(size=14), axis.title=element_text(size=16,face="bold"))
 
 
-
-
-
 #-------- Imputation of NA values with kNN on train dataset
 
+# remove unneeded columns
 train_clean1 <- train_2
 train_clean1$name <- NULL
 train_clean1$base_name <- NULL
@@ -467,6 +469,7 @@ train_clean1$cpu_details <- NULL
 train_clean1$os_details <- NULL
 train_clean1$gpu <- NULL
 
+# factorize categorical variables
 train_clean1$brand <- as.factor(train_clean1$brand)
 train_clean1$cpu <- as.factor(train_clean1$cpu)
 train_clean1$gpu_brand <- as.factor(train_clean1$gpu_brand)
@@ -478,6 +481,7 @@ train_clean1$thread <- as.factor(train_clean1$thread)
 aggr(x = train_clean1)
 glimpse(train_clean1)
 
+# kNN imputation
 set.seed(123)
 clean2_knn <- knnImputation(train_clean1)
 
@@ -600,27 +604,22 @@ clean2_knn_test$max_price <- test$max_price
 # ntrees = 1000 error: 333.76290307
 # ntrees = 1500 error: 335.35766153
 
-### so chose ntrees = 300
+### so choose ntrees = 300
 
 
 ## However, default repeated cv only tries 3 different values for mtry (another parameter of random forest)
 ## so tried grid search and random search with more checked values for mtry
 
 
-
-
-
 ###### 2 grid search -- better than random, a bit worse than default (error 334.64918312)
 ## (however, larger grid of mtry values tried, so better generalization)
 
+# set model controls for cross validation
 set.seed(123)
 train.control <- trainControl(method = "repeatedcv",
                                 number = 5, repeats = 3, search = "grid")
 set.seed(123)
 tunegrid <- expand.grid(.mtry=c(1:25)) #(AND INSIDE TRAIN FUNCTION NEAR NTREES WRITE tuneGrid=tunegrid)
-
-
-
 
 
 ###### 3 random search -- produced worse results (error 342.93214978)
@@ -629,9 +628,6 @@ tunegrid <- expand.grid(.mtry=c(1:25)) #(AND INSIDE TRAIN FUNCTION NEAR NTREES W
 #train.control <- trainControl(method = "repeatedcv",
 #                              number = 5, repeats = 3, search = "random")
 # (AND INSIDE TRAIN FUNCTION NEAR NTREES WRITE tuneLength=25)
-
-
-
 
 
 #############################################################################################
@@ -651,8 +647,6 @@ minPrice_Clean_Training <- clean2_knn %>% select(brand, screen_size, pixels_y, s
 #minPrice_Clean_Training <- data.frame(model.matrix(~., data=minPrice_Clean_Training_prev))
 
 
-
-
 #------------ Train for MAX_PRICE
 
 ##### Train the model 5 eXtreme Gradient Boosting
@@ -670,10 +664,6 @@ minPrice_Clean_Training <- clean2_knn %>% select(brand, screen_size, pixels_y, s
 #model7_max <- train(max_price ~ . , data = maxPrice_Clean_Training,
 #                    method = "gbm", trControl = train.control, metric = "MAE")
 
-
-
-
-
 #------------ Train for MIN_PRICE
 
 ##### Train the model 5 eXtreme Gradient Boosting
@@ -686,15 +676,12 @@ set.seed(123)
 model6_min <- train(min_price ~ . , data = minPrice_Clean_Training,
                     method = "parRF", trControl = train.control, metric = "MAE", ntree = 300, mtry = 2,
                     tuneGrid=tunegrid, importance = T)
-imp <- importance(model6_min, type=1, scale = F) # permutation importances
+# imp <- importance(model6_min, type=1, scale = F) # permutation importances
 varImp(model6_min)
 ##### Train the model 7 Stochastic Gradient Boosting
 #set.seed(123)
 #model7_min <- train(min_price ~ . , data = minPrice_Clean_Training,
 #                    method = "gbm", trControl = train.control, metric = "MAE")
-
-
-
 
 
 #------- Summarize the results ----------------
@@ -747,11 +734,6 @@ varImp(model6_min)
 # write.csv(results, file = "Model 7 (Stochastic Gradient Boosting) - min max price.csv", row.names = F)
 
 
-
-
-
-
-
 #------------ Training with RANGE and MIN_PRICE ------------#
 
 
@@ -770,7 +752,7 @@ set.seed(123)
 model6_range <- train(price_range ~ . , data = rangePrice_Clean_Training,
                     method = "parRF", trControl = train.control, metric = "MAE", ntree = 300, mtry = 2, tuneGrid=tunegrid,
                     importance = T)
-imp <- importance(model6_range, type=1, scale = F) # permutation importances
+# imp <- importance(model6_range, type=1, scale = F) # permutation importances
 varImp(model6_range)
 
 ##### Train the model 7 Stochastic Gradient Boosting
@@ -881,8 +863,7 @@ print(model6_range$finalModel)
 # 
 # write.csv(results, file = "Model 7 (Stochastic Gradient Boosting) - min range price.csv", row.names = F)
 
-
-
+### Feature importance using Boruta package ###
 
 library(Boruta)
 set.seed(123)
@@ -923,40 +904,12 @@ data2<-arrange(cbind(attr=rownames(attStats(boruta.x1)), attStats(boruta.x1)),de
 # write.csv(data2,"importance ranking2.csv")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #############################################################################################
 #################################    Data Exploration    ####################################
 #############################################################################################
 
+data.training <- clean2_knn
+p <- dim(data.training)[2]
 
 # Histograms for numeric variables
 for (i in 1:p){
@@ -993,9 +946,9 @@ for (i in 1:p){
 
 
 glimpse(data.training)
-res<-cor(data.training[,-c(1,2,6,8,10,17,20 )])
-corrplot(res, type = "upper", order = "hclust", 
-         tl.col = "black", tl.srt = 45)
+# res<-cor(data.training[,-c(1,2,6,8,10,17,20 )])
+# corrplot(res, type = "upper", order = "hclust", 
+#          tl.col = "black", tl.srt = 45)
 
 #MAE evaluation
 tree.frame <- data.frame(ntrees = c(50,100,150,200,250,300,350,500,1000,1500), 
